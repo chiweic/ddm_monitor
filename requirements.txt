@@ -1,1 +1,6 @@
-playwright 
+playwright        # Browser automation library
+
+fastapi          # Web framework for building APIs
+uvicorn          # ASGI server to run FastAPI apps
+httpx            # Async HTTP client
+selectolax       # Fast HTML parser based on lexbor
