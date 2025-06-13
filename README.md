@@ -2,10 +2,10 @@
 
 data_ingest is a small FastAPI service that does the followings:
 1. Posts: periodically scrapes news articles (Q&A) from the Dharma Drum Mountain (DDM) website. 
-2. Books: ingest books contents from designated folders
-3. Audios: so-called postable audio recordings publicly available also via DDM website
-4. Videos: youtube videos that containing Master Sheng Yan and his interview with anchor speakers
-5. Videos: other youtube videos that comes from official channels from DDM
+2. Books: ingest books contents from designated folders (moved)
+3. Audios: so-called postable audio recordings publicly available also via DDM website (moved)
+4. Videos: youtube videos that containing Master Sheng Yan and his interview with anchor speakers (moved)
+5. Videos: other youtube videos that comes from official channels from DDM (moved)
 
 # data storage
 
