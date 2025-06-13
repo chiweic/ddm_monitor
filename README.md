@@ -1,6 +1,33 @@
-# DDM Monitor
+# data_ingest
 
-DDM Monitor is a small FastAPI service that periodically scrapes news articles from the Dharma Drum Mountain (DDM) website. The scraped posts are stored as JSON files under the `data` directory and exposed through a `/posts` API endpoint.
+data_ingest is a small FastAPI service that does the followings:
+1. Posts: periodically scrapes news articles (Q&A) from the Dharma Drum Mountain (DDM) website. 
+2. Books: ingest books contents from designated folders
+3. Audios: so-called postable audio recordings publicly available also via DDM website
+4. Videos: youtube videos that containing Master Sheng Yan and his interview with anchor speakers
+5. Videos: other youtube videos that comes from official channels from DDM
+
+# data storage
+
+1. The scraped posts are stored as JSON files under the `data/posts` directory
+2. Simiarly for books, audios and videos under data/books, data/audios and data/videos
+
+# data transform
+
+What additional features or work performed on these data are:
+
+1. Chunking: producing meaningful size or semanticlly related that are suitable for further processing. 
+2. On each chunk, we also try to produce "Topic", "Summary", "Name Entity" and "Key Phrases" extraction
+3. For the Audios/Videos, we do perform speech-to-text, and then following chunking etc.,
+
+
+# Exposed API endpoints
+
+1. Initial ingest of data are already part when the system start. (so warmup take times)
+2. Additional online ingest are exposed via `/posts`
+3. Read-only access on chunks (associated with the original doc) are exposed via `/chunks`
+
+**noted. the Retrieval and Chat endpoint from other runtime will consume chunks via this interface**
 
 ## Installation
 

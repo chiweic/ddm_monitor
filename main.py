@@ -9,9 +9,13 @@ import os
 from datetime import datetime
 import shutil
 from pathlib import Path
+import pytz  # Add this import at the top if not present
+from contextlib import asynccontextmanager
+import spacy
+
 
 ENTRY_URL = "https://www.ddm.org.tw/xmnews?xsmsid=0K297379120077217595"
-SCRAPE_INTERVAL = 86400  # seconds (24 hours = 1 day)
+SCRAPE_INTERVAL = 86400  # seconds (24 hours = 1 day) - obselete, set to certain time of day
 
 # Data directory structure
 DATA_DIR = Path("data")
@@ -20,7 +24,17 @@ ARCHIVE_DIR = DATA_DIR / "archive"
 POSTS_FILE = CURRENT_DIR / "posts.json"
 POSTS_NEW_FILE = CURRENT_DIR / "posts_new.json"
 
-app = FastAPI()
+# initialize nlp element
+nlp=spacy.load('zh_core_web_lg')
+
+@asynccontextmanager
+async def startup_event(app: FastAPI):
+    # create task that scrape at this frequency
+    asyncio.create_task(periodic_scrape())
+    # look over directory for books ingesting
+    yield
+
+app = FastAPI(lifespan=startup_event)
 
 # Initialize data directories
 DATA_DIR.mkdir(exist_ok=True)
@@ -122,7 +136,10 @@ async def fetch_post_detail(client, url):
             paragraphs = content_elem.css('p')
             if not paragraphs:
                 print(f"Warning: No paragraphs found in .district div for {url}")
-                print("HTML of .district div:", content_elem.html[:200] + "..." if len(content_elem.html) > 200 else content_elem.html)
+                if content_elem.html is not None:
+                    print("HTML of .district div:", content_elem.html[:200] + "..." if len(content_elem.html) > 200 else content_elem.html)
+                else:
+                    print("HTML of .district div: None")
             
             content = '\n\n'.join(p.text(strip=True) for p in paragraphs if p.text(strip=True))
             if not content:
@@ -248,7 +265,7 @@ async def scrape_ddm_news():
                     if next_page:
                         print("Found next page element:", next_page.html)
                         onclick = next_page.attributes.get('onclick', '')
-                        if 'pagingHelper.getList' in onclick:
+                        if isinstance(onclick, str) and 'pagingHelper.getList' in onclick:
                             match = re.search(r"pagingHelper\.getList\('Q', (\d+)\)", onclick)
                             if match:
                                 next_page_num = int(match.group(1))
@@ -293,7 +310,7 @@ async def scrape_ddm_news():
                         if isinstance(detail, Exception):
                             post["error"] = str(detail)
                             print(f"Error fetching content for {post['title']}: {str(detail)}")
-                        else:
+                        elif isinstance(detail, dict):
                             if "content" in detail:
                                 post["content"] = detail["content"]
                             if "error" in detail:
@@ -315,14 +332,23 @@ async def scrape_ddm_news():
             # Keep the current posts if scraping fails
             latest_posts = current_posts
 
-async def periodic_scrape():
-    while True:
-        await scrape_ddm_news()
-        await asyncio.sleep(SCRAPE_INTERVAL)
+async def periodic_scrape(target_hour=3, target_minute=0, timezone="America/Los_Angeles"):
+    """
+    Run scrape_ddm_news() at a specific time of day (default: 03:00 AM US West Coast time).
+    """
+    from datetime import datetime, timedelta
 
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(periodic_scrape())
+    tz = pytz.timezone(timezone)
+    while True:
+        now = datetime.now(tz)
+        next_run = now.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
+        if now >= next_run:
+            next_run += timedelta(days=1)
+        wait_seconds = (next_run - now).total_seconds()
+        print(f"Waiting {wait_seconds/60:.1f} minutes until next scrape at {next_run.isoformat()}")
+        await asyncio.sleep(wait_seconds)
+        await scrape_ddm_news()
+
 
 @app.get("/posts")
 def get_posts(
@@ -357,8 +383,10 @@ def get_posts(
     
     # Calculate pagination
     total = len(latest_posts)
-    end = min(offset + limit, total)
-    posts = latest_posts[offset:end]
+    safe_offset = offset if offset is not None else 0
+    safe_limit = limit if limit is not None else 10
+    end = min(safe_offset + safe_limit, total)
+    posts = latest_posts[safe_offset:end]
     has_more = end < total
     
     # Get last update time from archive directory
@@ -380,3 +408,5 @@ def get_posts(
         "has_more": has_more,
         "last_updated": last_updated
     } 
+
+
