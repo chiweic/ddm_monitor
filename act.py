@@ -25,6 +25,62 @@ import requests
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# external scraper on activities details
+import requests
+from bs4 import BeautifulSoup
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=2, min=2, max=10),
+    retry=retry_if_exception_type(requests.exceptions.RequestException),
+    reraise=True
+)
+def scrape_event_description(url: str)-> Dict:
+    """
+    Fetches the content inside <div class="event_text_box"> from the provided URL.
+
+    Args:
+        url (str): The webpage URL.
+
+    Returns:
+        str: The extracted text, or None if not found.
+    """
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        )
+    }
+
+    response = requests.get(url, headers=headers, timeout=10)
+    response.raise_for_status()
+
+    soup = BeautifulSoup(response.text, 'html.parser')
+    
+    result={}
+    # parsing event table
+    table_info = soup.find("div", class_="event_table_info")
+    if table_info:
+        # loop over all tr
+        for tr in table_info.find_all("tr"):
+            # loop over all th and td
+            th=tr.find("th").get_text(strip=True)
+            td=tr.find("td").get_text(strip=True)
+            result.update({th:td})
+    
+    # find event text box
+    div = soup.find("div", class_="event_text_box")
+
+    if div:
+        result.update({"活動內容": div.get_text(strip=True, separator=" ")})
+        
+    else:
+        logger.warning(f"⚠️ event_text_box not found on {url}")
+
+    return result
+
 class AjaxCrawler:
     def __init__(self, headless=True, wait_timeout=10):
         """
@@ -287,16 +343,21 @@ class AjaxCrawler:
                             # span class = status
                             status_elem = signup_elem.find_element(By.CSS_SELECTOR, 'span')
                             logger.debug('signup status: ' + status_elem.text.strip())
+                        # try to scrape also the description given the link
+                        details=scrape_event_description(link_elem.get_attribute('href'))
+
                         # add to item_datas
                         item_datas.append({
-                            'title': title_elem.text.strip(),
-                            'period': period_elem.text.strip(),
-                            'link': link_elem.get_attribute('href'),
-                            'type': type_elem,
-                            'place': place_elem.text.strip(),
-                            'view': view_elem.text.strip(),
-                            'signup_status': status_elem.text.strip() if signup_elem else None
+                            '主題': title_elem.text.strip(),
+                            '時間': period_elem.text.strip(),
+                            '鏈接': link_elem.get_attribute('href'),
+                            '分類': type_elem,
+                            '地點': place_elem.text.strip(),
+                            '瀏覽人數': view_elem.text.strip(),
+                            '詳細': details,
+                            '報名': status_elem.text.strip() if signup_elem else None
                         })
+
                     break
             
             
@@ -505,6 +566,7 @@ def scrape_ddm_activities(max_dates: int = 14):
         if timeline_data:
             
             # Save the timeline data
+            # since we scrape often, add timestamp
             crawler.save_data(timeline_data, 'timeline_data', 'json')
             crawler.save_data(timeline_data, 'timeline_data', 'csv')
             
@@ -528,4 +590,4 @@ def scrape_ddm_activities(max_dates: int = 14):
 
 
 if __name__ == "__main__":
-    scrape_ddm_activities()
+    scrape_ddm_activities(max_dates=30)

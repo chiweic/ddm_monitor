@@ -348,7 +348,8 @@ async def periodic_scrape(target_hour=3, target_minute=0, timezone="America/Los_
         print(f"Waiting {wait_seconds/60:.1f} minutes until next scrape at {next_run.isoformat()}")
         await asyncio.sleep(wait_seconds)
         await scrape_ddm_news()
-
+        # scrape activities
+        
 
 @app.get("/posts")
 def get_posts(
